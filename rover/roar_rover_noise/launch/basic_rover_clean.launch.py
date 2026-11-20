@@ -1,0 +1,175 @@
+import os
+from ament_index_python.packages import get_package_prefix, get_package_share_directory
+from launch import LaunchDescription
+from launch.actions import (
+    DeclareLaunchArgument, ExecuteProcess, RegisterEventHandler,
+    TimerAction
+)
+from launch.conditions import IfCondition
+from launch_ros.actions import Node
+from launch.event_handlers import OnProcessExit
+from launch.substitutions import Command, FindExecutable, PathJoinSubstitution, LaunchConfiguration
+from launch_ros.parameter_descriptions import ParameterValue
+
+def generate_launch_description():
+    pkg_roar_rover_noise = get_package_share_directory('roar_rover_noise')
+
+    # ── 1. Launch Arguments ───────────────────────────────────────────────────
+    use_sim_time_arg = DeclareLaunchArgument(
+        'use_sim_time', default_value='true',
+        description='Use simulation (Gazebo) clock if true')
+    start_rviz_arg = DeclareLaunchArgument(
+        'start_rviz', default_value='false',
+        description='Start RViz after controllers are ready')
+    use_sim_time = LaunchConfiguration('use_sim_time')
+    start_rviz   = LaunchConfiguration('start_rviz')
+
+    # ── 2. Resource paths ─────────────────────────────────────────────────────
+    install_dir      = os.path.abspath(os.path.join(pkg_roar_rover_noise, '..'))
+    gz_resource_path = os.pathsep.join(filter(None, (
+        os.environ.get('GZ_SIM_RESOURCE_PATH'),
+        install_dir,
+        pkg_roar_rover_noise,
+    )))
+    gz_system_plugin_path = os.pathsep.join(filter(None, (
+        os.environ.get('GZ_SIM_SYSTEM_PLUGIN_PATH'),
+        os.path.join(get_package_prefix('gz_ros2_control'), 'lib'),
+    )))
+
+    # ── 3. URDF / robot_description ──────────────────────────────────────────
+    xacro_file = os.path.join(
+        pkg_roar_rover_noise, 'urdf', 'base', 'rover_simulation_clean.urdf.xacro')
+    robot_description_content = Command([
+        PathJoinSubstitution([FindExecutable(name='xacro')]), ' ', xacro_file
+    ])
+    robot_description = {
+        'robot_description': ParameterValue(robot_description_content, value_type=str)
+    }
+
+    # ── 4. World file ─────────────────────────────────────────────────────────
+    world_file = os.path.join(
+        pkg_roar_rover_noise, 'worlds', 'rover_world.sdf')
+
+    # ── 5. Gazebo SERVER (headless) ───────────────────────────────────────────
+    server_env = {
+        'GZ_SIM_RESOURCE_PATH':     gz_resource_path,
+        'GZ_SIM_SYSTEM_PLUGIN_PATH': gz_system_plugin_path,
+    }
+    gazebo_server = ExecuteProcess(
+        cmd=['gz', 'sim', '-s', '-r', '--headless-rendering', world_file],
+        additional_env=server_env,
+        output='screen'
+    )
+
+    # ── 6. Gazebo GUI CLIENT (hardware GPU) ───────────────────────────────────
+    # Launched 3 s after the server so the server is ready to accept a GUI
+    # connection. Uses your real AMD/Intel GPU — no software rendering here.
+    client_env = {
+        'QT_QPA_PLATFORM':          'xcb',
+        'GZ_SIM_RESOURCE_PATH':     gz_resource_path,
+    }
+    gazebo_gui = TimerAction(
+        period=3.0,
+        actions=[ExecuteProcess(
+            cmd=['gz', 'sim', '-g'],
+            additional_env=client_env,
+            output='screen'
+        )]
+    )
+
+    # ── 7. Robot State Publisher ──────────────────────────────────────────────
+    node_robot_state_publisher = Node(
+        package='robot_state_publisher',
+        executable='robot_state_publisher',
+        output='screen',
+        parameters=[robot_description, {'use_sim_time': use_sim_time}]
+    )
+
+    # ── 8. Spawn Robot ────────────────────────────────────────────────────────
+    spawn_entity = Node(
+        package='ros_gz_sim',
+        executable='create',
+        arguments=['-world', 'rover_world', '-topic', 'robot_description',
+                   '-name', 'roar_rover', '-z', '0.5', '-Y', '1.5707'],
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+
+    # ── 9. ROS↔Gazebo bridge ─────────────────────────────────────────────────
+    bridge = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        arguments=[
+            '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
+            '/bno055/data@sensor_msgs/msg/Imu[gz.msgs.IMU',
+            '/bno055/mag@sensor_msgs/msg/MagneticField[gz.msgs.Magnetometer',
+            '/zed2i/image_raw@sensor_msgs/msg/Image[gz.msgs.Image',
+            '/zed2i/depth@sensor_msgs/msg/Image[gz.msgs.Image',
+            '/zed2i/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
+            '/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist',
+        ],
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+
+    # ── 10. Controllers ───────────────────────────────────────────────────────
+    joint_state_broadcaster_spawner = Node(
+        package='controller_manager', executable='spawner',
+        arguments=['joint_state_broadcaster'],
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+    diff_drive_controller_spawner = Node(
+        package='controller_manager', executable='spawner',
+        arguments=['diff_drive_controller'],
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+    # ── 11. RViz (optional, delayed) ─────────────────────────────────────────
+    rviz_config_file = os.path.join(pkg_roar_rover_noise, 'rviz', 'basic_rover.rviz')
+    rviz_args = ['-d', rviz_config_file] if os.path.exists(rviz_config_file) else []
+    node_rviz = Node(
+        package='rviz2', executable='rviz2', name='rviz2',
+        output='screen', arguments=rviz_args,
+        parameters=[{'use_sim_time': use_sim_time}],
+        additional_env={'QT_QPA_PLATFORM': 'xcb'},
+        condition=IfCondition(start_rviz),
+    )
+    # ── 12. Clean Telemetry Node ──────────────────────────────────────────────
+    return LaunchDescription([
+        use_sim_time_arg,
+        start_rviz_arg,
+
+        # Gazebo server (headless rendering for sensors)
+        gazebo_server,
+        # Gazebo GUI (hardware GPU, delayed 3 s to let server start)
+        gazebo_gui,
+
+        node_robot_state_publisher,
+        bridge,
+        spawn_entity,
+        # Wait for spawn → wait 12 s → start joint state broadcaster
+        RegisterEventHandler(
+            event_handler=OnProcessExit(
+                target_action=spawn_entity,
+                on_exit=[TimerAction(
+                    period=12.0,
+                    actions=[joint_state_broadcaster_spawner]
+                )]
+            )
+        ),
+
+        # Joint broadcaster done → start diff_drive controller
+        RegisterEventHandler(
+            event_handler=OnProcessExit(
+                target_action=joint_state_broadcaster_spawner,
+                on_exit=[diff_drive_controller_spawner]
+            )
+        ),
+
+        # Diff drive done → start RViz (after 20 s cooldown)
+        RegisterEventHandler(
+            event_handler=OnProcessExit(
+                target_action=diff_drive_controller_spawner,
+                on_exit=[TimerAction(period=20.0, actions=[node_rviz])]
+            )
+        ),
+    ])

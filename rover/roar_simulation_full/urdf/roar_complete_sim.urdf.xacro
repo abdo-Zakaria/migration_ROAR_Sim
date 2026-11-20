@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="roar_complete_sim">
+
+  <!--
+    ===================================================================================
+    THIS IS THE MASTER SIMULATION FILE FOR THE COMPLETE ROBOT
+    ===================================================================================
+    Purpose: To generate a complete, simulatable model of the entire ROAR robot,
+             including the rover, arm, sensors, and all Gazebo plugins.
+    
+    This is the main file you will use in your Gazebo launch file.
+    ===================================================================================
+  -->
+
+  <xacro:arg name="use_gazebo" default="true" />
+  <xacro:arg name="use_hardware" default="false" />
+
+  <xacro:include filename="$(find roar_simulation_full)/urdf/base/rover.xacro" />
+  <xacro:include filename="$(find roar_simulation_full)/urdf/arm/sex_dof_arm.xacro" />
+
+
+  <xacro:include filename="$(find roar_simulation_full)/urdf/modules/sensors.xacro" />
+  <xacro:include filename="$(find roar_simulation_full)/urdf/modules/rover_gazebo.xacro" />
+  <xacro:include filename="$(find roar_simulation_full)/urdf/modules/arm_gazebo.xacro" />
+
+  <xacro:rover_base />
+  <xacro:robotic_arm prefix="arm_" parent_link="arm_mount_point">
+    <origin xyz="0 0 0" rpy="0 0 0" />
+  </xacro:robotic_arm>
+
+  <xacro:depth_camera name="camera" parent_link="base_link">
+    <origin xyz="0 0.3 0.35" rpy="0 0 1.57079632679" /> 
+  </xacro:depth_camera>
+  <xacro:depth_camera_gazebo name="camera" />
+
+  <xacro:bno055_imu name="bno055" parent_link="base_link">
+    <origin xyz="0 0 0.1" rpy="0 0 0" />
+  </xacro:bno055_imu>
+  <xacro:bno055_imu_gazebo name="bno055" />
+
+  <xacro:rover_gazebo controllers_yaml="$(find roar_simulation_full)/configs/combined_controllers.yaml" />
+
+  <xacro:arm_gazebo prefix="arm_" />
+
+</robot>

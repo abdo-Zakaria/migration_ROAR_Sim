@@ -1,0 +1,84 @@
+# VS Code C/C++ cache and settings
+.vscode/
+
+# Python caches
+__pycache__/
+*.pyc
+
+# ROS/colcon build directories if any end up here
+build/
+install/
+log/
+
+# Gemini configuration
+.gemini/
+.gemini.md
+
+# ROS 2 build outputs
+build/
+install/
+log/
+
+# Python cache
+**/__pycache__/
+*.pyc
+
+# Generated simulation datasets
+marsyards/worlds/generated_worlds/
+
+# Legacy generated worlds and maps
+marsyards/worlds/worlds/w_d*_c*.world
+marsyards/worlds/worlds/heightmaps/
+marsyards/worlds/worlds/costmaps/
+
+# Auto-generated launch files
+marsyards/worlds/launch/w_d*_c*.launch.py
+
+# Generated obstacle datasets
+navMission_setup/rock_generator/obs_data/*.npy
+navMission_setup/rock_generator/obs_data/*_info.txt
+
+# Temporary files
+*.zip
+*.backup
+
+# Python cache
+**/__pycache__/
+*.pyc
+
+# New world pipeline generated outputs
+navMission_setup/setup/outputs/world_*/
+navMission_setup/setup/world_setup/*/inputs/*
+navMission_setup/setup/world_setup/*/outputs/*
+
+# Keep empty structure folders
+!navMission_setup/setup/world_setup/*/inputs/.gitkeep
+!navMission_setup/setup/world_setup/*/outputs/.gitkeep
+!navMission_setup/setup/world_setup/costMap_gen/outputs/csv/
+!navMission_setup/setup/world_setup/costMap_gen/outputs/csv/.gitkeep
+!navMission_setup/setup/outputs/.gitkeep
+!navMission_setup/setup/waypoints_setup/.gitkeep
+
+# Navigation mission generated master outputs
+navMission_setup/outputs/world_*/
+
+# Manual stage inputs and outputs
+navMission_setup/world_setup/*/inputs/*
+navMission_setup/world_setup/*/outputs/*
+
+# Preserve empty pipeline folders
+!navMission_setup/outputs/.gitkeep
+!navMission_setup/world_setup/*/inputs/.gitkeep
+!navMission_setup/world_setup/*/outputs/.gitkeep
+!navMission_setup/world_setup/costMap_gen/outputs/csv/
+!navMission_setup/world_setup/costMap_gen/outputs/csv/.gitkeep
+!navMission_setup/waypoints_setup/.gitkeep
+
+# Python generated cache
+**/__pycache__/
+*.pyc
+
+# Archived rock generator runtime outputs
+history/rock_generator/obs_data/*.npy
+history/rock_generator/obs_data/*_info.txt
+!history/rock_generator/obs_data/.gitkeep
